@@ -16,6 +16,11 @@ th,td{border:1px solid #e5e5e5;padding:.4rem .6rem;text-align:center}
 th{background:#f7f5f1}
 code{background:#f3f1ec;padding:.1rem .35rem;border-radius:4px;font-size:.9em}
 .k{color:var(--acc);font-weight:700}
+.gloss{background:#fbfaf8;border:1px solid #eee;border-radius:12px;padding:.4rem 1.1rem;margin:1rem 0}
+.gloss dt{font-weight:700;color:var(--acc);margin-top:.7rem}
+.gloss dd{margin:.15rem 0 .2rem;color:#333}
+.take{background:#fff7f2;border-left:4px solid var(--acc);padding:1rem 1.2rem;border-radius:0 10px 10px 0;margin:1rem 0}
+figcaption{color:#555;font-size:.9rem;margin:.1rem 0 1rem}
 footer{color:var(--mut);font-size:.85rem;margin-top:3rem;border-top:1px solid #eee;padding-top:1rem}
 </style></head><body>
 
@@ -43,23 +48,66 @@ footer{color:var(--mut);font-size:.85rem;margin-top:3rem;border-top:1px solid #e
 （候補 198 手・ランダム top5≈0.025）。頻度推奨より高い。</li>
 </ul>
 
+<h2>スコアの読み方</h2>
+<dl class="gloss">
+<dt>サプライズ = −log p(次の手)</dt>
+<dd>モデルが「この文脈でこの手は起きにくい」と判断するほど大きい値。correct な手だけで学習しているので、
+ミス（本来ここで起きない手）ほどサプライズが高くなる、という想定で検知に使う。</dd>
+<dt>AUROC（ミス検知）</dt>
+<dd>サプライズの大小で「ミスの手」と「正しい手」をどれだけ正しく順位づけできるかの指標。
+<b>0.5＝偶然（当てずっぽう）</b>、<b>1.0＝完全</b>、0.7前後＝中程度。ミスの割合に左右されないので不均衡データでも読める。
+例：AR の 0.804 は「ランダムに選んだミスの手が、ランダムな正しい手よりサプライズが高い確率が約80%」。</dd>
+<dt>bigram（比較の基準線）</dt>
+<dd>直前の1手だけから次を予測する単純なカウントモデル。これと同等なら「信号は主に局所的（直前の手との整合）」を意味する。</dd>
+<dt>NLL（学習曲線）</dt>
+<dd>予測分布が実測をどれだけ当てるか（低いほど良い）。ただし <b>AR は離散確率・NF は連続密度で単位が異なり、値の直接比較はできない</b>。
+だから比較は下流の AUROC で行う。</dd>
+<dt>反事実の top-k 的中率</dt>
+<dd>ミス直後に成功尤度が高い順へ手を並べ、上位 k 手のどれかが「その系列で実際に続いた正しい手」と一致した割合。
+候補 198 手から当てるので、ランダムなら top-5 で約 2.5%。0.34 はその十数倍。</dd>
+</dl>
+
 <h2>手順ミスの検知</h2>
 <img src="results/figures/detect.png" alt="detection AUROC">
-<p>ミス種別で見ると、<b>不要な取り外し</b>は離散モデルで AUROC ~0.97 と明確に検知でき、
-<b>順序ミス・位置ミス</b>は 0.5〜0.68 とはるかに難しい。「間違い」の検知しやすさは種別に強く依存する。</p>
+<figcaption><b>読み方</b>：棒が高いほどサプライズでミスをよく見分けられる（点線=偶然0.5）。
+離散の2手法（AR 0.804／bigram 0.837）は連続NF（0.634）より <b>+0.171</b> 高い。
+<b>意味＝離散の手順トークンに連続密度のNFを当てるのは不利</b>。また bigram が AR と同等以上なのは、
+検知に効く情報の多くが「直前の手との整合」という局所的なものだから。</figcaption>
+<p>ミス種別で見ると差がはっきりする。<b>不要な取り外し</b>（付けた直後に外すなど、直前と矛盾する手）は
+AUROC ~0.97 と明確に検知できる一方、<b>順序ミス・位置ミス</b>は 0.5〜0.68 と難しい。
+<b>意味＝「間違い」と一口に言っても、局所的に矛盾する手は捉えやすく、大域的な段取りの誤りは捉えにくい。</b></p>
 <img src="results/figures/bytype.png" alt="AUROC by mistake type">
+<figcaption><b>読み方</b>：カテゴリごとの検知 AUROC。n は該当ミスの件数（少ない種別は数値が不安定）。</figcaption>
 
 <h2>反事実：本来の次の手を推奨</h2>
 <p>各ミス直後に、成功尤度 <code>p(次手|履歴)</code> の高い手を順位づけし、その系列で実際に続いた
-<b>correct な次手</b>を的中できるかを測る。尤度による推奨は頻度ベースラインより高く、ランダムを大きく上回る。</p>
+<b>correct な次手</b>を的中できるかを測る。</p>
 <img src="results/figures/counterfactual.png" alt="counterfactual top-k">
+<figcaption><b>読み方</b>：棒が高いほど「本来の手」を上位に挙げられている。点線＝ランダムに選んだ場合の top-5。
+尤度による推奨（top-5 0.340）はランダム（0.025）を十数倍上回り、頻度で推す方式とも同等以上。
+<b>意味＝低尤度で「ここは変」と気づくだけでなく、「では何をすべきか」まで具体的に出せる。</b></figcaption>
 
 <h2>1系列のサプライズ推移</h2>
 <img src="results/figures/timeline.png" alt="surprise timeline">
-<p>橙＝ミス、緑＝修正。ミス（特に不要な取り外し）でサプライズが持ち上がる様子が見える。</p>
+<figcaption><b>読み方</b>：横軸＝組立の手順、縦軸＝サプライズ。橙＝ミスのある手、緑＝修正の手。
+ミス（特に不要な取り外し）でサプライズが持ち上がる。逆に平坦なミスは検知しにくい手＝上の種別別の弱い部分に対応。</figcaption>
 
 <h2>学習曲線</h2>
 <img src="results/figures/curves.png" alt="training curves">
+<figcaption><b>読み方</b>：val が下がれば予測分布の当てはまり向上。左右で縦軸の単位が違い、
+<b>AR（離散確率）と NF（連続密度）の NLL は直接比較しない</b>点に注意。</figcaption>
+
+<h2>まとめ：結果の意味</h2>
+<div class="take">
+<b>離散の手順ミスは「タイミング」ではなく「どの手を・どの順で」の問題</b>で、離散の次手尤度がそこに効く（ミス検知 AUROC 0.804）。
+同じトークンに<b>連続密度の NF</b> を当てると 0.634 まで下がる（<b>+0.171</b>）＝<b>離散データに NF をそのまま使うのは不利</b>。
+さらに単純な bigram（0.837）が AR と同等以上で、<b>効く情報の多くは直前の手との局所整合</b>。
+検知できるのは局所矛盾（不要な取り外し ~0.97）が中心で、大域の段取り誤り（順序・位置 0.5〜0.68）は難しい——<b>「間違い」の中身で検知しやすさが変わる</b>のが正直な描像。
+一方で反事実（本来の手を top-5 で 1/3 提示）は機能する。
+<b>結論：離散手順では素直な離散モデルが向く。NF の旨みは連続側で出す</b>——姉妹版
+<a href="https://kankusakabe.github.io/CaptainCook4D-NF/">CaptainCook4D-NF（連続の実行ペース）</a>と対で読むと、
+<b>失敗検知で向く密度モデルは信号が離散か連続かで変わる</b>ことが見える。
+</div>
 
 <h2>再現</h2>
 <pre><code>uv run python -m asm.extract     # CSV -> steps.parquet
