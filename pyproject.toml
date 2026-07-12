@@ -1,0 +1,12 @@
+[project]
+name = "assembly101-nf"
+version = "0.1.0"
+description = "Discrete next-action likelihood on Assembly101 mistake-detection (order/position mistakes, counterfactual corrections)"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2", "zuko>=1.4", "pandas>=2.0", "pyarrow>=14",
+    "numpy>=1.26", "matplotlib>=3.8", "scikit-learn>=1.3",
+]
+
+[tool.uv]
+package = false
